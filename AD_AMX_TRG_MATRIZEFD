@@ -1,0 +1,20 @@
+CREATE OR REPLACE TRIGGER AD_AMX_TRG_MATRIZEFD
+  BEFORE DELETE ON AD_MATRIZEFD  
+  REFERENCING NEW AS NEW OLD AS OLD
+  FOR EACH ROW 
+ 
+  
+DECLARE
+
+BEGIN
+
+IF DELETING AND :OLD.APURADO = 'S' THEN
+ RAISE_APPLICATION_ERROR(-20101,
+                              'Não é possível deletar uma registro apurado - prossiga com a limpeza da apuração.');
+
+END IF;
+
+
+
+END;
+/
