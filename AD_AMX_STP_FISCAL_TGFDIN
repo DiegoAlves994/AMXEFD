@@ -1,0 +1,146 @@
+CREATE OR REPLACE PROCEDURE "AD_AMX_STP_FISCAL_TGFDIN" (
+           P_CODUSU NUMBER,        -- Código do usuário logado
+           P_IDSESSAO VARCHAR2,    -- Identificador da execução. Serve para buscar informações dos parâmetros/campos da execução.
+           P_QTDLINHAS NUMBER,     -- Informa a quantidade de registros selecionados no momento da execução.
+           P_MENSAGEM OUT VARCHAR2 -- Caso seja passada uma mensagem aqui, ela será exibida como uma informação ao usuário.
+    ) AS
+           FIELD_NUNICO NUMBER;
+           FIELD_SEQ NUMBER;
+           FIELD_SEQUENCIA NUMBER;
+           V_TITULO    VARCHAR(4000);
+           V_MENSAGEM  VARCHAR(4000);
+           V_PROCESSAR BOOLEAN;
+    BEGIN
+
+
+
+           FOR I IN 1..P_QTDLINHAS 
+           LOOP                 
+
+               FIELD_NUNICO := ACT_INT_FIELD(P_IDSESSAO, I, 'NUNICO');
+               FIELD_SEQ := ACT_INT_FIELD(P_IDSESSAO, I, 'SEQ');
+                FIELD_SEQUENCIA := ACT_INT_FIELD(P_IDSESSAO, I, 'SEQUENCIA');
+
+               /*   V_TITULO    := 'Atenção alterações irão impactar diretamente os lançamentos fiscais!';
+                  V_MENSAGEM  := 'Se clicar em SIM este processo irá recalcular o PIS/COFINS dos documentos marcados como "alterados via rotina = SIM"';
+                  V_PROCESSAR := ACT_ESCOLHER_SIMNAO(V_TITULO, V_MENSAGEM, P_IDSESSAO, 0) = 'S' ;*/
+
+                   --IF V_PROCESSAR = TRUE THEN
+
+    --ALTERAÇÕES DE PIS.
+    FOR PIS IN (SELECT 
+    NUNICO,
+    SEQUENCIAITE,
+    SEQUENCIA,
+    SEQ,
+    NUNOTA, 
+    CODIMP,
+    CODINC, 
+    BASE, 
+    BASERED, 
+    ALIQUOTA,
+    VALOR, 
+    CST
+    FROM AD_ITEAPURACAOEFD
+    WHERE NUNICO = FIELD_NUNICO
+    AND SEQ = FIELD_SEQ
+    AND SEQUENCIA = FIELD_SEQUENCIA
+    AND ALTERADO = 1
+    AND ALTERADOCAB = 0
+    AND CODIMP = 6
+    )LOOP
+
+    UPDATE TGFDIN SET
+     BASE = PIS.BASE,
+    BASERED = PIS.BASERED, 
+    ALIQUOTA = PIS.ALIQUOTA,
+    VALOR = PIS.VALOR, 
+    CST = PIS.CST, 
+    CODUSU = STP_GET_CODUSULOGADO, 
+    DHALTER = SYSDATE,
+    ALIQUOTANORMAL = PIS.ALIQUOTA,
+    AD_RECALCULADOEFD = 'S'
+    WHERE NUNOTA = PIS.NUNOTA
+    AND CODIMP = 6
+    AND SEQUENCIA = PIS.SEQUENCIAITE
+    AND CODINC = PIS.CODINC;
+
+
+    UPDATE AD_ITEAPURACAOEFD SET ALTERADOCAB = 1 
+    WHERE NUNICO = FIELD_NUNICO
+    AND SEQUENCIA = PIS.SEQUENCIA
+    AND SEQ = PIS.SEQ
+    AND NUNOTA = PIS.NUNOTA
+    AND CODIMP = 6;
+
+    END LOOP;
+
+
+    --ALTERAÇÕES DE COFINS.
+    FOR COFINS IN (SELECT 
+
+    SEQUENCIA,
+    NUNICO,
+    SEQ,
+    SEQUENCIAITE,
+    NUNOTA, 
+    CODIMP,
+    CODINC, 
+    BASE, 
+    BASERED, 
+    ALIQUOTA,
+    VALOR, 
+    CST
+    FROM AD_ITEAPURACAOEFD
+    WHERE NUNICO = FIELD_NUNICO
+    AND SEQ = FIELD_SEQ
+    AND SEQUENCIA = FIELD_SEQUENCIA
+    AND ALTERADO = 1
+    AND ALTERADOCAB = 0
+    AND CODIMP = 7
+    )LOOP
+
+    UPDATE TGFDIN SET
+    BASE = COFINS.BASE,
+    BASERED = COFINS.BASERED, 
+    ALIQUOTA = COFINS.ALIQUOTA,
+    VALOR = COFINS.VALOR, 
+    CST = COFINS.CST, 
+    CODUSU = STP_GET_CODUSULOGADO, 
+    DHALTER = SYSDATE,
+    ALIQUOTANORMAL = COFINS.ALIQUOTA,
+    AD_RECALCULADOEFD = 'S'
+
+    WHERE NUNOTA = COFINS.NUNOTA
+    AND CODIMP = 7
+    AND SEQUENCIA = COFINS.SEQUENCIAITE
+    AND CODINC = COFINS.CODINC;
+
+    UPDATE AD_ITEAPURACAOEFD SET ALTERADOCAB = 1 
+    WHERE NUNICO = FIELD_NUNICO
+    AND SEQUENCIA = COFINS.SEQUENCIA
+    AND SEQ = COFINS.SEQ
+    AND NUNOTA = COFINS.NUNOTA
+    AND CODIMP = 7;
+
+
+
+
+    END LOOP;
+
+
+
+
+  --  END IF;
+
+
+           END LOOP;
+
+
+
+     P_MENSAGEM := 'Alterações foram replicadas!!';
+
+
+
+    END;
+/
